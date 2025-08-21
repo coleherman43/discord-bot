@@ -71,3 +71,19 @@ class AsyncUserDatabase:
                 (current_time, username, str(user_id))
             )
             await db.commit()
+
+    async def _get_all_users(self):
+        """Get all users (for debugging)"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("SELECT * FROM users ORDER BY xp DESC")
+            users = await cursor.fetchall()
+            return [
+                {
+                    'user_id': user[0],
+                    'username': user[1],
+                    'xp': user[2],
+                    'level': user[3],
+                    'last_message_time': user[4]
+                }
+                for user in users
+            ]
