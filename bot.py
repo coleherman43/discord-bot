@@ -18,8 +18,8 @@ REWARD_LEVEL_MILESTONES = int(os.getenv('REWARD_LEVEL_MILESTONES'))
 db = AsyncUserDatabase()
 
 intents = discord.Intents.default()
-# Change this later to True to read message contents
-intents.message_content = False
+# Determines whether bot can read messages (necessary for commands)
+intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
@@ -85,5 +85,24 @@ async def on_message(message):
     
     # Process bot commands
     await bot.process_commands(message)
+
+# Check coin balance
+@bot.command()
+async def balance(ctx):
+    """Check your coin balance"""
+    user = await db.get_user(ctx.author.id)
+    await ctx.send(f"{ctx.author.mention}, you have **{user['coins']:.1f}** coins!")
+
+# Check profile
+@bot.command()
+async def profile(ctx):
+    """Check your profile"""
+    user = await db.get_user(ctx.author.id)
+    await ctx.send(
+        f"**{ctx.author.mention}'s Profile**\n"
+        f"Level: {user['level']}\n"
+        f"XP: {user['xp']}\n"
+        f"Coins: {user['coins']:.1f}"
+    )
 
 bot.run(BOT_TOKEN)
