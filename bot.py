@@ -8,45 +8,101 @@ from dotenv import load_dotenv
 from database import AsyncUserDatabase
 
 load_dotenv()
-TOKEN = os.getenv('BOT_TOKEN')
+BOT_TOKEN = os.getenv('BOT_TOKEN')
 XP_COOLDOWN = int(os.getenv('XP_COOLDOWN'))
-XP_GAIN = int(os.getenv('XP_PER_MESSAGE'))
+XP_PER_MESSAGE = int(os.getenv('XP_PER_MESSAGE'))
+COINS_PER_MESSAGE = float(os.getenv('COINS_PER_MESSAGE'))
+COINS_PER_LEVEL = int(os.getenv('COINS_PER_LEVEL'))
+REWARD_LEVEL_MILESTONES = int(os.getenv('REWARD_LEVEL_MILESTONES'))
+
 db = AsyncUserDatabase()
 
 intents = discord.Intents.default()
-# Change this later to True to read message contents
-intents.message_content = False
+# Determines whether bot can read messages (necessary for commands)
+intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+# Process messages being sent
+async def handle_user_activity(message):
+    """Handle XP gain, coin gain, level up"""
+    user = await db.get_user(message.author.id)
+    current_time = int(time.time())
+    
+    # Check if cooldown is done - exit if no
+    if current_time - user['last_message_time'] < XP_COOLDOWN:
+        return
+
+    # Gain XP and coins
+    leveled_up = await db.update_user_xp(message.author.id, XP_PER_MESSAGE)
+    await db.update_user_coins(message.author.id, COINS_PER_MESSAGE)
+
+    # Update last message time
+    await db.update_last_message_time(message.author.id, current_time, message.author.name)
+        
+    # Get updated user data
+    updated_user = await db.get_user(message.author.id)
+    print(f"After: Level {updated_user['level']}, XP {updated_user['xp']}, Coins {updated_user['coins']}")
+    
+    # Handle level up rewards and announcement
+    if leveled_up:
+        await handle_level_up(message, updated_user)
+
+async def handle_level_up(message, user_data):
+    """Handle level up rewards / announcements"""
+    new_level = user_data['level']
+
+    # Give coins
+    await db.update_user_coins(message.author.id, COINS_PER_LEVEL)
+
+    # Send level up message
+    await message.channel.send(
+        f"User {message.author.mention} leveled up to level {new_level}! "
+        f"You earned {COINS_PER_LEVEL} coins!"
+    )
+
+    # Future: Rewards for milestones
+    if new_level % REWARD_LEVEL_MILESTONES == 0:
+        await message.channel.send(f"Milestone reached! Coming soon - special rewards")
+    
+    print(f"Level up rewards given to {message.author}")
+
+
+# Loading in
 @bot.event
 async def on_ready():
     await db.init_database()
     print(f'{bot.user} has connected to Discord')
 
+# Handle message sent by user
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
     
-    user = await db.get_user(message.author.id)
-    current_time = int(time.time())
-    if current_time - user['last_message_time'] >= XP_COOLDOWN:
-        print(f"Before: Level {user['level']}, XP {user['xp']}")
-        
-        # Gain XP
-        leveled_up = await db.update_user_xp(message.author.id, XP_GAIN)
-        
-        # Get updated user data for debug
-        updated_user = await db.get_user(message.author.id)
-        print(f"After: Level {updated_user['level']}, XP {updated_user['xp']}")
-        print(f"Leveled up: {leveled_up}")
-        
-        await db.update_last_message_time(message.author.id, current_time, message.author.name)
-        
-        if leveled_up:
-            await message.channel.send(f"Yay! {message.author.mention} leveled up to level {updated_user['level']}!")
+    # Handle user activity
+    await handle_user_activity(message)
     
+    # Process bot commands
     await bot.process_commands(message)
 
-bot.run(TOKEN)
+# Check coin balance
+@bot.command()
+async def balance(ctx):
+    """Check your coin balance"""
+    user = await db.get_user(ctx.author.id)
+    await ctx.send(f"{ctx.author.mention}, you have **{user['coins']:.1f}** coins!")
+
+# Check profile
+@bot.command()
+async def profile(ctx):
+    """Check your profile"""
+    user = await db.get_user(ctx.author.id)
+    await ctx.send(
+        f"**{ctx.author.mention}'s Profile**\n"
+        f"Level: {user['level']}\n"
+        f"XP: {user['xp']}\n"
+        f"Coins: {user['coins']:.1f}"
+    )
+
+bot.run(BOT_TOKEN)

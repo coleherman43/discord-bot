@@ -1,6 +1,8 @@
 import aiosqlite
 import os
+from dotenv import load_dotenv
 
+load_dotenv()
 XP_PER_LEVEL = int(os.getenv('XP_PER_LEVEL', 5))
 
 class AsyncUserDatabase:
@@ -16,7 +18,8 @@ class AsyncUserDatabase:
                     username TEXT,
                     xp INTEGER DEFAULT 0,
                     level INTEGER DEFAULT 1,
-                    last_message_time INTEGER DEFAULT 0
+                    last_message_time INTEGER DEFAULT 0,
+                    coins REAL DEFAULT 0
                 )                 
             ''')
             await db.commit()
@@ -41,7 +44,8 @@ class AsyncUserDatabase:
                 'username': user[1],
                 'xp': user[2],
                 'level': user[3],
-                'last_message_time': user[4]
+                'last_message_time': user[4],
+                'coins': user[5]
             }
         
     async def update_user_xp(self, user_id, xp_gain):
@@ -58,6 +62,18 @@ class AsyncUserDatabase:
             await db.commit()
         
         return new_level > user['level']
+    
+    async def update_user_coins(self, user_id, coin_gain):
+        """"Add coins and handle level up"""
+        user = await self.get_user(user_id)
+        new_coins = user['coins'] + coin_gain
+
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE users SET coins = ? WHERE user_id = ?",
+                (new_coins, str(user_id))
+            )
+            await db.commit()
     
     def calculate_level(self, xp):
         """Calculate level based on XP"""
@@ -83,7 +99,8 @@ class AsyncUserDatabase:
                     'username': user[1],
                     'xp': user[2],
                     'level': user[3],
-                    'last_message_time': user[4]
+                    'last_message_time': user[4],
+                    'coins': user[5]
                 }
                 for user in users
             ]
