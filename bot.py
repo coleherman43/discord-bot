@@ -105,4 +105,63 @@ async def profile(ctx):
         f"Coins: {user['coins']:.1f}"
     )
 
+# Check shop
+@bot.command()
+async def shop(ctx, category=None):
+    """View the shop items"""
+    items = await db.get_shop_items(category)
+    
+    if not items:
+        await ctx.send("Shop is empty!")
+        return
+    
+    # Group by category
+    categories = {}
+    for item in items:
+        cat = item['category']
+        if cat not in categories:
+            categories[cat] = []
+        categories[cat].append(item)
+    
+    shop_text = "🛒 **SHOP** 🛒\n\n"
+    
+    for cat_name, cat_items in categories.items():
+        shop_text += f"**{cat_name.upper()}**\n"
+        for item in cat_items:
+            emoji = "🎨" if item['category'] == "cosmetic" else "⚡" if item['category'] == "utility" else "🍀"
+            shop_text += f"{emoji} `ID: {item['id']}` **{item['name']}** - {item['price']} coins\n"
+            shop_text += f"   _{item['description']}_\n"
+            if item['min_level'] > 1:
+                shop_text += f"   _Requires level {item['min_level']}_\n"
+            shop_text += "\n"
+    
+    shop_text += "Use `!buy <item_id>` to purchase!"
+    await ctx.send(shop_text)
+
+@bot.command()
+async def buy(ctx, item_id: int):
+    """Purchase an item from the shop"""
+    result = await db.purchase_item(ctx.author.id, item_id)
+    
+    if result["success"]:
+        await ctx.send(f"✅ {result['message']}\n💰 Coins remaining: {result['coins_remaining']}")
+    else:
+        await ctx.send(f"❌ {result['message']}")
+
+@bot.command()
+async def inventory(ctx):
+    """Check your inventory"""
+    items = await db.get_user_inventory(ctx.author.id)
+    
+    if not items:
+        await ctx.send("Your inventory is empty!")
+        return
+    
+    inv_text = f"🎒 **{ctx.author.mention}'s Inventory**\n\n"
+    for item_name, description, quantity, effect_type, effect_value in items:
+        inv_text += f"• **{item_name}** x{quantity}\n"
+        inv_text += f"  _{description}_\n\n"
+    
+    await ctx.send(inv_text)
+
 bot.run(BOT_TOKEN)
